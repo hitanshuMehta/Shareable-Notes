@@ -321,8 +321,8 @@ export default function NoteEditor({ note, onBack }) {
           <RichTextEditor
             content={content}
             onChange={setContent}
-            placeholder="Start writing your note..."
-          />
+            placeholder="Start writing your note..." 
+            />
 
           <div className="bg-white rounded-lg border border-gray-200 p-3 sm:p-4">
             <label className="block text-sm font-medium text-gray-700 mb-2">Tags (optional)</label>

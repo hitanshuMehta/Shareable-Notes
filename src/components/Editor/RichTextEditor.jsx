@@ -1,30 +1,80 @@
-import React, { useRef, useEffect, useState } from 'react';
-import { FiBold, FiItalic, FiUnderline, FiAlignLeft, FiAlignCenter, FiAlignRight } from 'react-icons/fi';
-import DOMPurify from 'dompurify';
-import toast from 'react-hot-toast';
+import React, { useRef, useEffect, useState, useCallback } from 'react';
+import { FiBold, FiItalic, FiUnderline, FiAlignLeft, FiAlignCenter, FiAlignRight, FiRotateCcw, FiRotateCw } from 'react-icons/fi';
+
+// Mock DOMPurify for this example
+const DOMPurify = {
+  sanitize: (content) => content
+};
+
+// Mock toast for this example
+const toast = {
+  success: (message) => console.log('Success:', message),
+  error: (message) => console.log('Error:', message)
+};
 
 export default function RichTextEditor({ content, onChange, placeholder = 'Start writing...' }) {
   const editorRef = useRef(null);
   const [fontSize, setFontSize] = useState(16);
+  
+  // Undo/Redo state
+  const [history, setHistory] = useState([content || '']);
+  const [historyIndex, setHistoryIndex] = useState(0);
+  const [isUndoRedo, setIsUndoRedo] = useState(false);
+
+  // Debounced history saving
+  const saveTimeoutRef = useRef(null);
+  const lastSavedContentRef = useRef(content || '');
 
   useEffect(() => {
-    if (editorRef.current && editorRef.current.innerHTML !== content) {
+    if (editorRef.current && editorRef.current.innerHTML !== content && !isUndoRedo) {
       const sanitizedContent = DOMPurify.sanitize(content);
       editorRef.current.innerHTML = sanitizedContent;
     }
-  }, [content]);
+  }, [content, isUndoRedo]);
+
+  // Save to history with debouncing
+  const saveToHistory = useCallback((newContent) => {
+    if (isUndoRedo || newContent === lastSavedContentRef.current) return;
+
+    // Clear existing timeout
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+    }
+
+    // Debounce saving to history
+    saveTimeoutRef.current = setTimeout(() => {
+      setHistory(prev => {
+        const newHistory = prev.slice(0, historyIndex + 1);
+        newHistory.push(newContent);
+        
+        // Limit history size to prevent memory issues
+        const maxHistorySize = 50;
+        if (newHistory.length > maxHistorySize) {
+          return newHistory.slice(-maxHistorySize);
+        }
+        return newHistory;
+      });
+      
+      setHistoryIndex(prev => Math.min(prev + 1, 49)); // Adjust for max history size
+      lastSavedContentRef.current = newContent;
+    }, 500); // Save after 500ms of inactivity
+  }, [historyIndex, isUndoRedo]);
 
   const execCommand = (command, value) => {
     document.execCommand(command, false, value);
     if (editorRef.current) {
-      onChange(editorRef.current.innerHTML);
+      const newContent = editorRef.current.innerHTML;
+      onChange(newContent);
+      saveToHistory(newContent);
     }
     editorRef.current?.focus();
   };
 
   const handleInput = () => {
     if (editorRef.current) {
-      onChange(editorRef.current.innerHTML);
+      const newContent = editorRef.current.innerHTML;
+      onChange(newContent);
+      saveToHistory(newContent);
     }
   };
 
@@ -35,6 +85,52 @@ export default function RichTextEditor({ content, onChange, placeholder = 'Start
     document.execCommand('insertText', false, sanitizedText);
     handleInput();
   };
+
+  // Undo function
+  const undo = useCallback(() => {
+    if (historyIndex > 0) {
+      const newIndex = historyIndex - 1;
+      const prevContent = history[newIndex];
+      
+      setIsUndoRedo(true);
+      setHistoryIndex(newIndex);
+      
+      if (editorRef.current) {
+        editorRef.current.innerHTML = prevContent;
+      }
+      onChange(prevContent);
+      
+      // Reset the flag after a brief delay
+      setTimeout(() => setIsUndoRedo(false), 10);
+      
+      toast.success('Undone');
+    } else {
+      toast.error('Nothing to undo');
+    }
+  }, [history, historyIndex, onChange]);
+
+  // Redo function
+  const redo = useCallback(() => {
+    if (historyIndex < history.length - 1) {
+      const newIndex = historyIndex + 1;
+      const nextContent = history[newIndex];
+      
+      setIsUndoRedo(true);
+      setHistoryIndex(newIndex);
+      
+      if (editorRef.current) {
+        editorRef.current.innerHTML = nextContent;
+      }
+      onChange(nextContent);
+      
+      // Reset the flag after a brief delay
+      setTimeout(() => setIsUndoRedo(false), 10);
+      
+      toast.success('Redone');
+    } else {
+      toast.error('Nothing to redo');
+    }
+  }, [history, historyIndex, onChange]);
 
   const handleKeyDown = (e) => {
     if (e.ctrlKey || e.metaKey) {
@@ -51,6 +147,18 @@ export default function RichTextEditor({ content, onChange, placeholder = 'Start
           e.preventDefault();
           execCommand('underline');
           break;
+        case 'z':
+          e.preventDefault();
+          if (e.shiftKey) {
+            redo(); // Ctrl+Shift+Z or Cmd+Shift+Z for redo
+          } else {
+            undo(); // Ctrl+Z or Cmd+Z for undo
+          }
+          break;
+        case 'y':
+          e.preventDefault();
+          redo(); // Ctrl+Y or Cmd+Y for redo (Windows style)
+          break;
         default:
           break;
       }
@@ -66,14 +174,51 @@ export default function RichTextEditor({ content, onChange, placeholder = 'Start
   };
 
   const isCommandActive = (command) => {
-    return document.queryCommandState(command);
+    try {
+      return document.queryCommandState(command);
+    } catch {
+      return false;
+    }
   };
 
+  // Check if undo/redo is available
+  const canUndo = historyIndex > 0;
+  const canRedo = historyIndex < history.length - 1;
+
   return (
-    <div className="bg-white rounded-lg border border-gray-200 overflow-hidden w-full">
+    <div className="bg-white rounded-lg border border-gray-200 overflow-hidden w-full max-w-4xl mx-auto">
       {/* Toolbar */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-2 sm:p-3 border-b border-gray-200 bg-gray-50 space-y-2 sm:space-y-0">
         <div className="flex items-center flex-wrap gap-1 sm:space-x-1">
+          {/* Undo/Redo buttons */}
+          <button
+            onClick={undo}
+            disabled={!canUndo}
+            className={`p-1.5 sm:p-2 rounded-md transition-colors ${
+              !canUndo
+                ? 'text-gray-300 cursor-not-allowed'
+                : 'text-gray-600 hover:bg-gray-100'
+            }`}
+            title="Undo (Ctrl+Z)"
+          >
+            <FiRotateCcw className="w-3 h-3 sm:w-4 sm:h-4" />
+          </button>
+
+          <button
+            onClick={redo}
+            disabled={!canRedo}
+            className={`p-1.5 sm:p-2 rounded-md transition-colors ${
+              !canRedo
+                ? 'text-gray-300 cursor-not-allowed'
+                : 'text-gray-600 hover:bg-gray-100'
+            }`}
+            title="Redo (Ctrl+Y or Ctrl+Shift+Z)"
+          >
+            <FiRotateCw className="w-3 h-3 sm:w-4 sm:h-4" />
+          </button>
+
+          <div className="w-px h-4 sm:h-6 bg-gray-300 mx-1 sm:mx-2" />
+
           <button
             onClick={() => execCommand('bold')}
             className={`p-1.5 sm:p-2 rounded-md transition-colors ${
@@ -165,7 +310,16 @@ export default function RichTextEditor({ content, onChange, placeholder = 'Start
         style={{ fontSize: `${fontSize}px` }}
         data-placeholder={placeholder}
         dir="ltr"
+        suppressContentEditableWarning={true}
       />
+
+      {/* History indicator */}
+      <div className="px-3 py-2 text-xs text-gray-500 border-t border-gray-100 bg-gray-50 flex justify-between items-center">
+        <span>History: {historyIndex + 1}/{history.length}</span>
+        <span>
+          Shortcuts: Ctrl+Z (Undo), Ctrl+Y or Ctrl+Shift+Z (Redo)
+        </span>
+      </div>
 
       <style jsx>{`
         [contenteditable]:empty:before {
