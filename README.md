@@ -2,14 +2,14 @@
 
 A **rich-text notes application** built with React and TailwindCSS.  
 Includes **AI-powered features** (summary, glossary, grammar check, tags) using **Gemini API**.  
-Notes can be **created, edited, pinned, searched, and password-protected**.  
+Notes can be **created, edited, pinned, searched, password-protected, and reverted with Undo/Redo**.  
 All data is stored securely in **localStorage** (no backend required).  
 
 ---
 
 ## 🚀 Features
 
-- 📝 Custom Rich Text Editor (Bold, Italic, Underline, Alignment, Font Size)  
+- 📝 Custom Rich Text Editor (Bold, Italic, Underline, Alignment, Font Size, **Undo/Redo**)  
 - 📌 Pin important notes  
 - 🔍 Search notes by title/content  
 - 🤖 AI Features (via Gemini API):  
@@ -34,6 +34,7 @@ All data is stored securely in **localStorage** (no backend required).
 - **Gemini API**  
 
 ---
+
 
 ## 🔑 Environment Setup
 
